@@ -40,6 +40,9 @@ library:
     - text
     - text-show
     - th-lift
+    - unordered-containers
+    - containers
+    - extra
 
 executables:
   coin-classifier-exe:

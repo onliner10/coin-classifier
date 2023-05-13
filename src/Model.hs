@@ -11,10 +11,12 @@
 
 module Model where
 
+import Core (NormalizedWords, containsAll, containsNone, toNormalizedWords)
 import Data.List.Extra (groupSort)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Text (Text, groupBy, isInfixOf, toUpper, words)
+import Data.Maybe (catMaybes, mapMaybe)
+import Data.Text (Text, groupBy, isInfixOf, toUpper, unwords, words)
 import TextShow (TextShow, showt)
 
 data ClassifierRule = MustContain Text | MustNotContain Text deriving (Show, Eq)
@@ -152,9 +154,26 @@ data CoinDef = CoinDef {coinType :: CoinType, year :: Year} deriving (Show, Eq)
 instance Classifier CoinDef where
   classifierRule (CoinDef t y) = classifierRule t ++ classifierRule y
 
-allCoinsDefs :: [CoinDef]
-allCoinsDefs =
+allCoinDefs :: [CoinDef]
+allCoinDefs =
   concatMap (\ct -> CoinDef ct <$> getEmissionYears ct) allCoinTypes
+
+matchesClassifier :: (Classifier a) => NormalizedWords -> a -> Bool
+matchesClassifier input a = containsAll input mustContains && containsNone input mustNotContains
+  where
+    rules = classifierRule a
+    getMustContain (MustContain x) = Just x
+    getMustContain _ = Nothing
+    getMustNotContain (MustNotContain x) = Just x
+    getMustNotContain _ = Nothing
+    mustContains = toNormalizedWords . Data.Text.unwords $ mapMaybe getMustContain rules
+    mustNotContains = toNormalizedWords . Data.Text.unwords $ mapMaybe getMustNotContain rules
+
+identifyCoin :: [CoinDef] -> Text -> [CoinDef]
+identifyCoin defs input =
+  filter (matchesClassifier normalizedInput) defs
+  where
+    normalizedInput = toNormalizedWords input
 
 data Coin = Coin {coinDef :: CoinDef, features :: [CoinFeature]}
 

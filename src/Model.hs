@@ -17,6 +17,7 @@ import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text, groupBy, isInfixOf, toUpper, unwords, words)
+import Data.Text.Lazy.Builder.Int (hexadecimal)
 import TextShow (TextShow, showt)
 
 data ClassifierRule = MustContain Text | MustNotContain Text deriving (Show, Eq)
@@ -147,15 +148,13 @@ allCoinTypes = [minBound .. maxBound]
 yearToCoins :: Map Year [CoinType]
 yearToCoins = Map.fromList . groupSort $ concatMap (\x -> (,x) <$> getEmissionYears x) allCoinTypes
 
-data CoinFeature = Trial | Reversed deriving (Eq, Show)
-
 data CoinDef = CoinDef {coinType :: CoinType, year :: Year} deriving (Show, Eq)
 
 instance Classifier CoinDef where
   classifierRule (CoinDef t y) = classifierRule t ++ classifierRule y
 
-allCoinDefs :: [CoinDef]
-allCoinDefs =
+rp2CoinDefs :: [CoinDef]
+rp2CoinDefs =
   concatMap (\ct -> CoinDef ct <$> getEmissionYears ct) allCoinTypes
 
 matchesClassifier :: (Classifier a) => NormalizedWords -> a -> Bool
@@ -169,19 +168,38 @@ matchesClassifier input a = containsAll input mustContains && containsNone input
     mustContains = toNormalizedWords . Data.Text.unwords $ mapMaybe getMustContain rules
     mustNotContains = toNormalizedWords . Data.Text.unwords $ mapMaybe getMustNotContain rules
 
-identifyCoin :: [CoinDef] -> Text -> [CoinDef]
-identifyCoin defs input =
-  filter (matchesClassifier normalizedInput) defs
+identifyCoinDef :: [CoinDef] -> NormalizedWords -> [CoinDef]
+identifyCoinDef defs input = filter (matchesClassifier input) defs
+
+data CoinFeature = Trial | Reversed | Fake | Struck deriving (Eq, Show, Enum, Bounded)
+
+instance Classifier CoinFeature where
+  classifierRule Trial = [MustContain "PRÓBA"]
+  classifierRule Reversed = [MustContain "ODWROTKA"]
+  classifierRule Fake = [MustContain "FALSYFIKAT", MustContain "FALS"]
+  classifierRule Struck = [MustContain "DESTRUKT"]
+
+allCoinFeatures :: [CoinFeature]
+allCoinFeatures = [minBound .. maxBound]
+
+identifyCoinFeatures :: NormalizedWords -> [CoinFeature]
+identifyCoinFeatures input = filter (matchesClassifier input) allCoinFeatures
+
+data Coin = Coin {coinDef :: CoinDef, features :: [CoinFeature]} deriving (Eq, Show)
+
+singleMay :: [a] -> Maybe a
+singleMay [x] = Just x
+singleMay _ = Nothing
+
+identifyCoin :: [CoinDef] -> Text -> Maybe Coin
+identifyCoin coinDefs input = do
+  def <- singleMay matchingDefs
+  let coinFeatures = identifyCoinFeatures normalizedInput
+
+  pure $ Coin def coinFeatures
   where
     normalizedInput = toNormalizedWords input
-
-data Coin = Coin {coinDef :: CoinDef, features :: [CoinFeature]}
-
--- bedziemy mogli obliczyc klucze naturalne ?
-
--- should return Coin ultimately
-
--- potem typ który opisuje "instancje" - z ficzerami i gradingiem (wspólne dla każdej monety)
+    matchingDefs = identifyCoinDef coinDefs normalizedInput
 
 foo :: String
 foo = "witam"

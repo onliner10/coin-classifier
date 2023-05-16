@@ -35,6 +35,15 @@ ghc-options:
 
 library:
   source-dirs: src
+  default-extensions:
+    - ImportQualifiedPost
+    - DeriveGeneric
+    - DeriveAnyClass
+    - QuasiQuotes
+    - OverloadedStrings
+    - RankNTypes
+    - MultiParamTypeClasses
+    - ScopedTypeVariables
   dependencies:
     - refined
     - text
@@ -43,6 +52,13 @@ library:
     - unordered-containers
     - containers
     - extra
+    - safe
+    - postgresql-simple
+    - resource-pool
+    - string-interpolate
+    - mtl
+    - monad-logger
+    - bytestring
 
 executables:
   coin-classifier-exe:

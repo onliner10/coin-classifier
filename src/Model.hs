@@ -2,23 +2,18 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Model where
+module Model (identifyCoin, rp2CoinDefs, Coin (..), CoinDef (..), CoinType (..), CoinFeature (..)) where
 
 import Core (NormalizedWords, containsAll, containsNone, toNormalizedWords)
-import Data.List.Extra (groupSort)
-import Data.Map (Map)
-import Data.Map qualified as Map
-import Data.Maybe (catMaybes, mapMaybe)
-import Data.Text (Text, groupBy, isInfixOf, toUpper, unwords, words)
-import Data.Text.Lazy.Builder.Int (hexadecimal)
-import TextShow (TextShow, showt)
+import Data.Maybe (mapMaybe)
+import Data.Text (Text, unwords)
+import TextShow (TextShow, fromText, showb, showt)
 
 data ClassifierRule = MustContain Text | MustNotContain Text deriving (Show, Eq)
 
@@ -66,6 +61,42 @@ data CoinType
   | GR2
   | GR1
   deriving (Eq, Ord, Bounded, Enum, Show)
+
+instance TextShow CoinType where
+  showb ZL20Chrobry = fromText "20 złotych (Chrobry)"
+  showb ZL10Polonia = fromText "10 złotych (Polonia)"
+  showb ZL10PoloniaBezZnaku = fromText "10 złotych (Polonia) bez znaku mennicy"
+  showb ZL10Sobieski = fromText "10 złotych (Sobieski)"
+  showb ZL10Traugutt = fromText "10 złotych (Traugutt)"
+  showb ZL10PilsudskiStrzelecki = fromText "10 złotych (Piłsudski Strzelecki)"
+  showb ZL10Pilsudski = fromText "10 złotych"
+  showb ZL10Chrobry = fromText "10 złotych (Chrobry)"
+  showb ZL5Konstytucja100Perel = fromText "5 złotych (Konstytucja 100 perełek)"
+  showb ZL5Konstytucja81Perel = fromText "5 złotych (Konstytucja 81 perełek)"
+  showb ZL5Nike = fromText "5 złotych (Nike)"
+  showb ZL5NikeBezZnaku = fromText "5 złotych (Nike) bez znaku mennicy"
+  showb ZL5Sztandar = fromText "5 złotych (Sztandar)"
+  showb ZL5SztandarGleboki = fromText "5 złotych (Sztandar) stempel głęboki"
+  showb ZL5Polonia = fromText "5 złotych (Polonia)"
+  showb ZL5PoloniaBezZnaku = fromText "5 złotych (Polonia) bez znaku mennicy"
+  showb ZL5PilsudskiStrzelecki = fromText "5 złotych (Piłsudski Strzelecki)"
+  showb ZL5Pilsudski = fromText "5 złotych (Piłsudski)"
+  showb ZL5Zaglowiec = fromText "5 złotych (Żaglowiec)"
+  showb ZL2Zniwiarka = fromText "5 złotych (Żniwiarka)"
+  showb ZL2ZniwiarkaParyz = fromText "5 złotych (Żniwiarka) mennica Paryż"
+  showb ZL2ZniwiarkaFiladelfia = fromText "5 złotych (Żniwiarka) mennica Filadelfia"
+  showb ZL2ZniwiarkaLondyn = fromText "5 złotych (Żniwiarka) mennica Londyn"
+  showb ZL2Polonia = fromText "2 złotych (Polonia)"
+  showb ZL2Pilsudski = fromText "2 złotych (Piłsudski)"
+  showb ZL2Zaglowiec = fromText "2 złotych (Żaglowiec)"
+  showb ZL1Zniwiarka = fromText "1 złotych (Żniwiarka)"
+  showb ZL1 = fromText "1 złotych"
+  showb GR50 = fromText "50 groszy"
+  showb GR20 = fromText "20 groszy"
+  showb GR10 = fromText "10 groszy"
+  showb GR5 = fromText "5 groszy"
+  showb GR2 = fromText "2 groszy"
+  showb GR1 = fromText "1 grosz"
 
 instance Classifier CoinType where
   classifierRule ZL20Chrobry = [MustContain "20 złotych", MustContain "chrobry"]
@@ -145,9 +176,6 @@ instance EmissionYears CoinType where
 allCoinTypes :: [CoinType]
 allCoinTypes = [minBound .. maxBound]
 
-yearToCoins :: Map Year [CoinType]
-yearToCoins = Map.fromList . groupSort $ concatMap (\x -> (,x) <$> getEmissionYears x) allCoinTypes
-
 data CoinDef = CoinDef {coinType :: CoinType, year :: Year} deriving (Show, Eq)
 
 instance Classifier CoinDef where
@@ -171,7 +199,7 @@ matchesClassifier input a = containsAll input mustContains && containsNone input
 identifyCoinDef :: [CoinDef] -> NormalizedWords -> [CoinDef]
 identifyCoinDef defs input = filter (matchesClassifier input) defs
 
-data CoinFeature = Trial | Reversed | Fake | Struck deriving (Eq, Show, Enum, Bounded)
+data CoinFeature = Trial | Reversed | Fake | Struck deriving (Eq, Show, Enum, Bounded, TextShow)
 
 instance Classifier CoinFeature where
   classifierRule Trial = [MustContain "PRÓBA"]
@@ -200,6 +228,3 @@ identifyCoin coinDefs input = do
   where
     normalizedInput = toNormalizedWords input
     matchingDefs = identifyCoinDef coinDefs normalizedInput
-
-foo :: String
-foo = "witam"

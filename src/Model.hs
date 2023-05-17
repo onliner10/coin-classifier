@@ -199,7 +199,13 @@ matchesClassifier input a = containsAll input mustContains && containsNone input
 identifyCoinDef :: [CoinDef] -> NormalizedWords -> [CoinDef]
 identifyCoinDef defs input = filter (matchesClassifier input) defs
 
-data CoinFeature = Trial | Reversed | Fake | Struck deriving (Eq, Show, Enum, Bounded, TextShow)
+data CoinFeature = Trial | Reversed | Fake | Struck deriving (Eq, Show, Enum, Bounded)
+
+instance TextShow CoinFeature where
+  showb Trial = fromText "Trial"
+  showb Reversed = fromText "Reversed"
+  showb Fake = fromText "Fake"
+  showb Struck = fromText "Struck"
 
 instance Classifier CoinFeature where
   classifierRule Trial = [MustContain "PRÓBA"]

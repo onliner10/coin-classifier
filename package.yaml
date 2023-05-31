@@ -38,6 +38,7 @@ library:
   default-extensions:
     - ImportQualifiedPost
     - DeriveGeneric
+    - FlexibleInstances
     - DeriveAnyClass
     - QuasiQuotes
     - OverloadedStrings
@@ -61,6 +62,9 @@ library:
     - monad-logger
     - bytestring
     - monad-control
+    - conduit
+    - stm-chans
+    - stm-conduit
 
 executables:
   coin-classifier-exe:
@@ -73,6 +77,7 @@ executables:
     dependencies:
     - coin-classifier
     - bytestring
+    - conduit
     - monad-logger
 
 tests:

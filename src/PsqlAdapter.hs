@@ -1,26 +1,34 @@
+{-# OPTIONS_GHC -Wno-deriving-defaults #-}
+
 module PsqlAdapter
   ( mkHandle,
     PsqlAdapterHandle,
     initDbValues,
+    inputSource,
+    markAsFailed,
+    markLotClassified,
   )
 where
 
-import Control.Exception (onException)
-import Control.Exception.Base (mask)
+import Conduit (ConduitT)
+import Control.Concurrent.STM.TMChan (closeTMChan, newTMChanIO, writeTMChan)
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import Control.Monad.Logger (MonadLogger, logInfoN)
-import Control.Monad.Trans.Control (MonadBaseControl, control)
+import Control.Monad.Logger (MonadLogger, logDebugN, logInfoN)
+import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.ByteString (ByteString)
-import Data.Pool (Pool, createPool, destroyResource, putResource, takeResource, withResource)
+import Data.Conduit.TMChan (sourceTMChan)
+import Data.Pool (Pool, createPool, withResource)
 import Data.Proxy (Proxy (..))
 import Data.String.Interpolate (i)
 import Data.Text (Text)
-import Database.PostgreSQL.Simple (Connection, close, connectPostgreSQL, execute, executeMany)
+import Database.PostgreSQL.Simple (Connection, FromRow, Query, close, connectPostgreSQL, execute, executeMany, forEach_)
+import Database.PostgreSQL.Simple.FromField (FromField (fromField))
 import Database.PostgreSQL.Simple.SqlQQ (sql)
+import GHC.Conc (atomically, forkIO)
+import GHC.Generics (Generic)
 import GHC.Int (Int64)
-import Model (CoinFeature, CoinType)
-import Text.Read.Lex (Number)
-import TextShow (TextShow, fromText, showt)
+import Model (ClassifiedCoin (classifiedCoinKey, coin), Coin (coinDef), CoinDef (coinType, year), CoinFeature, CoinType, UnclassifiedCoin (..), features, unYear)
+import TextShow (TextShow, showt)
 
 newtype PsqlAdapterHandle = PsqlAdapterHandle (Pool Connection)
 
@@ -69,6 +77,88 @@ initCoinFeatures conn = do
   logInfoN [i|Initialization of coin features: #{changedRows} rows changed|]
   pure changedRows
 
+mkPgSource :: (MonadIO m) => ((r -> IO ()) -> IO ()) -> IO (ConduitT () r m ())
+mkPgSource action = do
+  chan <- newTMChanIO
+  _ <-
+    forkIO $ do
+      action $ atomically . writeTMChan chan
+      atomically $ closeTMChan chan
+  pure $ sourceTMChan chan
+
+-- sourceQuery ::
+--   (ToRow params, FromRow r, MonadIO m) =>
+--   Connection ->
+--   Query ->
+--   params ->
+--   IO (ConduitT () r m ())
+-- sourceQuery conn q params = mkPgSource $ forEach conn q params
+
+sourceQuery_ :: (FromRow r, MonadIO m) => Connection -> Query -> IO (ConduitT () r m ())
+sourceQuery_ conn q = mkPgSource $ forEach_ conn q
+
+newtype LotsPk = LotsPk {unLotsPk :: Text}
+  deriving (FromRow, Generic, Show)
+
+instance FromField LotsPk where
+  fromField f bs = LotsPk <$> fromField f bs
+
+instance FromRow (UnclassifiedCoin LotsPk)
+
+inputSource :: PsqlAdapterHandle -> IO (ConduitT () (UnclassifiedCoin LotsPk) IO ())
+inputSource (PsqlAdapterHandle pool) =
+  withResource pool $ \conn ->
+    sourceQuery_
+      conn
+      [sql|
+        SELECT url as unclassifiedCoinKey, title FROM "lots" WHERE "classification" IS NULL AND "classification_state" = 0 ORDER BY "date"
+      |]
+
+markAsFailed :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => PsqlAdapterHandle -> (LotsPk, Text) -> m ()
+markAsFailed (PsqlAdapterHandle pool) (pk, reason) = do
+  logDebugN [i|Marking #{pk} as failed in PSQL because of: '#{reason}'|]
+
+  _ <- withResource pool $ \conn ->
+    liftIO $
+      execute
+        conn
+        [sql|
+        UPDATE "lots" SET "classification_state" = -1, "classification_error" = ? WHERE "url"=?
+      |]
+        (reason, unLotsPk pk)
+
+  logDebugN [i|Marked #{pk} as failed in PSQL|]
+
+markLotClassified :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => PsqlAdapterHandle -> ClassifiedCoin LotsPk -> m ()
+markLotClassified (PsqlAdapterHandle pool) c = do
+  logDebugN [i|Marking as classified:  #{classifiedCoinKey c}'|]
+
+  let cDef = coinDef $ coin c
+
+  _ <- withResource pool $ \conn ->
+    liftIO $
+      execute
+        conn
+        [sql|
+        UPDATE "lots" SET "classification_state" = 1, "classification_error" = NULL, "classification" = ?, "identified_year" = ? WHERE "url"=?
+      |]
+        (fromEnum $ coinType cDef, unYear $ year cDef, unLotsPk $ classifiedCoinKey c)
+
+  let featureLots = fmap ((unLotsPk $ classifiedCoinKey c,) . fromEnum) $ features $ coin c
+
+  featuresInserted <-
+    withResource pool $ \conn ->
+      liftIO $
+        executeMany
+          conn
+          [sql|
+          INSERT INTO "lots_features" (lot_url, feature_id) VALUES (?,?) ON CONFLICT DO NOTHING
+        |]
+          featureLots
+
+  logDebugN [i|Inserted #{featuresInserted} features|]
+
+-- how does this monad base control work? :O
 initDbValues :: (MonadLogger m, MonadIO m, MonadBaseControl IO m) => PsqlAdapterHandle -> m ()
 initDbValues (PsqlAdapterHandle pool) = do
   _ <- withResource pool initCoinTypes

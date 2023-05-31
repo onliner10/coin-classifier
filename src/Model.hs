@@ -8,11 +8,26 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Model (identifyCoin, rp2CoinDefs, Coin (..), CoinDef (..), CoinType (..), CoinFeature (..)) where
+module Model
+  ( identifyCoin,
+    rp2CoinDefs,
+    Coin (..),
+    CoinDef (..),
+    CoinType (..),
+    Year (..),
+    CoinFeature (..),
+    UnclassifiedCoin (..),
+    ClassifiedCoin (classifiedCoinKey, coin),
+    classifyAs,
+    CoinIdentificationError (..),
+  )
+where
 
+import Control.Monad.Except (MonadError (throwError))
 import Core (NormalizedWords, containsAll, containsNone, toNormalizedWords)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text, unwords)
+import GHC.Generics (Generic)
 import TextShow (TextShow, fromText, showb, showt)
 
 data ClassifierRule = MustContain Text | MustNotContain Text deriving (Show, Eq)
@@ -20,7 +35,7 @@ data ClassifierRule = MustContain Text | MustNotContain Text deriving (Show, Eq)
 class (Eq a) => Classifier a where
   classifierRule :: a -> [ClassifierRule]
 
-newtype Year = Year {getYear :: Int} deriving (Eq, Ord, Num, TextShow, Show)
+newtype Year = Year {unYear :: Int} deriving (Eq, Ord, Num, TextShow, Show)
 
 instance Classifier Year where
   classifierRule (Year x) = [MustContain $ " " `mappend` showt x]
@@ -221,13 +236,22 @@ identifyCoinFeatures input = filter (matchesClassifier input) allCoinFeatures
 
 data Coin = Coin {coinDef :: CoinDef, features :: [CoinFeature]} deriving (Eq, Show)
 
-singleMay :: [a] -> Maybe a
-singleMay [x] = Just x
-singleMay _ = Nothing
+data UnclassifiedCoin a = UnclassifiedCoin {unclassifiedCoinKey :: a, title :: Text} deriving (Generic)
 
-identifyCoin :: [CoinDef] -> Text -> Maybe Coin
+classifyAs :: UnclassifiedCoin a -> Coin -> ClassifiedCoin a
+classifyAs un c = ClassifiedCoin {classifiedCoinKey = unclassifiedCoinKey un, coin = c}
+
+data ClassifiedCoin a = ClassifiedCoin {classifiedCoinKey :: a, coin :: Coin} deriving (Generic)
+
+data CoinIdentificationError = MultipleMatchingDefinitions [CoinDef] | NoMatchingDefinitions deriving (Eq, Show)
+
+identifyCoin :: (MonadError CoinIdentificationError m) => [CoinDef] -> Text -> m Coin
 identifyCoin coinDefs input = do
-  def <- singleMay matchingDefs
+  def <- case matchingDefs of
+    [d] -> pure d
+    [] -> throwError NoMatchingDefinitions
+    xs -> throwError $ MultipleMatchingDefinitions xs
+
   let coinFeatures = identifyCoinFeatures normalizedInput
 
   pure $ Coin def coinFeatures

@@ -4,7 +4,7 @@ module Main (main) where
 
 import Conduit (ConduitT, mapC, mapM_C, runConduit, (.|))
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Logger (runStdoutLoggingT)
+import Control.Monad.Logger (LogLevel (LevelDebug), LoggingT, filterLogger, runStdoutLoggingT)
 import Data.Bifunctor (Bifunctor (second), first)
 import Data.ByteString.Char8 (pack)
 import Model (ClassifiedCoin, CoinIdentificationError, UnclassifiedCoin (title, unclassifiedCoinKey), classifyAs, identifyCoin, rp2CoinDefs)
@@ -31,17 +31,23 @@ tryClassifyCoin un =
 coinClassifierC :: (MonadIO m) => ConduitT (UnclassifiedCoin a) (ClassificationResult a) m ()
 coinClassifierC = mapC tryClassifyCoin
 
+runLogger :: MonadIO m => LoggingT m a -> m a
+runLogger = runStdoutLoggingT . filterLogger (\_ lvl -> lvl /= LevelDebug)
+
 handleClassificationResult :: SQL.PsqlAdapterHandle -> ClassificationResult SQL.LotsPk -> IO ()
 handleClassificationResult handle =
-  runStdoutLoggingT
+  runLogger
     . either
       (SQL.markAsFailed handle . second showt)
       (SQL.markLotClassified handle)
 
+-- TODO: Grafana - predkosc odczytu, zapisu itepe - skutecznosc klasyfikacji
+-- buforowanie
+-- parsowanie stanu monety (jako osobny proces? czy nie?)
 runApp :: SQL.PsqlAdapterHandle -> IO ()
 runApp handle =
   do
-    runStdoutLoggingT $ SQL.initDbValues handle
+    runLogger $ SQL.initDbValues handle
 
     src <- SQL.inputSource handle
 

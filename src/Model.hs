@@ -31,14 +31,14 @@ import Data.Maybe (mapMaybe)
 import Data.Text (Text, unwords)
 import GHC.Generics (Generic)
 import TextShow (TextShow (showbPrec), fromText, showb, showt)
-import TextShow.Generic (FromGeneric, genericShowbPrec)
+import TextShow.Generic (genericShowbPrec)
 
 data ClassifierRule = MustContain Text | MustNotContain Text deriving (Show, Eq)
 
 class (Eq a) => Classifier a where
   classifierRule :: a -> [ClassifierRule]
 
-newtype Year = Year {unYear :: Int} deriving (Eq, Ord, Num, TextShow, Show)
+newtype Year = Year {unYear :: Int} deriving newtype (Eq, Ord, Num, TextShow, Show)
 
 instance Classifier Year where
   classifierRule (Year x) = [MustContain $ " " `mappend` showt x]

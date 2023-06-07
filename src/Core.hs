@@ -2,12 +2,12 @@ module Core (NormalizedWords, toNormalizedWords, containsAll, containsNone) wher
 
 import Data.HashSet (HashSet)
 import Data.HashSet qualified as HS
-import Data.Text (Text, toUpper, words)
+import Data.Text (Text, replace, toUpper, words)
 
 newtype NormalizedWords = NormalizedWords {getWords :: HashSet Text}
 
 toNormalizedWords :: Text -> NormalizedWords
-toNormalizedWords = NormalizedWords . HS.fromList . Data.Text.words . toUpper
+toNormalizedWords = NormalizedWords . HS.fromList . Data.Text.words . replace "." " " . replace "," " " . toUpper
 
 containsAll :: NormalizedWords -> NormalizedWords -> Bool
 containsAll (NormalizedWords a) (NormalizedWords b) = (a `HS.intersection` b) == b

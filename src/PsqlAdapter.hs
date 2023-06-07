@@ -19,7 +19,7 @@ import Control.Monad.Logger (MonadLogger, logDebugN, logInfoN)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.ByteString (ByteString)
 import Data.Conduit.TMChan (sourceTMChan)
-import Data.Pool (Pool, createPool, withResource)
+import Data.Pool (Pool, createPool, takeResource, withResource)
 import Data.Proxy (Proxy (..))
 import Data.String.Interpolate (i)
 import Data.Text (Text)
@@ -88,14 +88,6 @@ mkPgSource action = do
       atomically $ closeTMChan chan
   pure $ sourceTMChan chan
 
--- sourceQuery ::
---   (ToRow params, FromRow r, MonadIO m) =>
---   Connection ->
---   Query ->
---   params ->
---   IO (ConduitT () r m ())
--- sourceQuery conn q params = mkPgSource $ forEach conn q params
-
 sourceQuery_ :: (FromRow r, MonadIO m) => Connection -> Query -> IO (ConduitT () r m ())
 sourceQuery_ conn q = mkPgSource $ forEach_ conn q
 
@@ -108,13 +100,16 @@ instance FromField LotsPk where
 instance FromRow (UnclassifiedCoin LotsPk)
 
 inputSource :: PsqlAdapterHandle -> IO (ConduitT () (UnclassifiedCoin LotsPk) IO ())
-inputSource (PsqlAdapterHandle pool) =
-  withResource pool $ \conn ->
-    sourceQuery_
-      conn
-      [sql|
-        SELECT url as unclassifiedCoinKey, title FROM "lots" WHERE "classification" IS NULL AND "classification_state" = 0 ORDER BY "date"
-      |]
+inputSource (PsqlAdapterHandle pool) = do
+  -- TODO: This should be released... sometime
+  -- Probably return release handle and destroy in the upper layer
+  (conn, _) <- takeResource pool
+
+  sourceQuery_
+    conn
+    [sql|
+      SELECT url as unclassifiedCoinKey, title FROM "lots" WHERE "classification" IS NULL AND "classification_state" = 0 ORDER BY "date"
+    |]
 
 markAsFailed :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => PsqlAdapterHandle -> (LotsPk, Text) -> m ()
 markAsFailed (PsqlAdapterHandle pool) (pk, reason) = do

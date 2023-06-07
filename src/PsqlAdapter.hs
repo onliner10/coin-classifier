@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-deriving-defaults #-}
 
 module PsqlAdapter
@@ -7,6 +8,7 @@ module PsqlAdapter
     inputSource,
     markAsFailed,
     markLotClassified,
+    LotsPk,
   )
 where
 

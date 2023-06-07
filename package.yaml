@@ -79,6 +79,9 @@ executables:
     - bytestring
     - conduit
     - monad-logger
+    - text-show
+    default-extensions:
+    - ImportQualifiedPost
 
 tests:
   coin-classifier-test:

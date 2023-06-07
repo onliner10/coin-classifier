@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -28,7 +30,8 @@ import Core (NormalizedWords, containsAll, containsNone, toNormalizedWords)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text, unwords)
 import GHC.Generics (Generic)
-import TextShow (TextShow, fromText, showb, showt)
+import TextShow (TextShow (showbPrec), fromText, showb, showt)
+import TextShow.Generic (FromGeneric, genericShowbPrec)
 
 data ClassifierRule = MustContain Text | MustNotContain Text deriving (Show, Eq)
 
@@ -191,7 +194,10 @@ instance EmissionYears CoinType where
 allCoinTypes :: [CoinType]
 allCoinTypes = [minBound .. maxBound]
 
-data CoinDef = CoinDef {coinType :: CoinType, year :: Year} deriving (Show, Eq)
+data CoinDef = CoinDef {coinType :: CoinType, year :: Year} deriving (Show, Eq, Generic)
+
+instance TextShow CoinDef where
+  showbPrec = genericShowbPrec
 
 instance Classifier CoinDef where
   classifierRule (CoinDef t y) = classifierRule t ++ classifierRule y
@@ -243,7 +249,13 @@ classifyAs un c = ClassifiedCoin {classifiedCoinKey = unclassifiedCoinKey un, co
 
 data ClassifiedCoin a = ClassifiedCoin {classifiedCoinKey :: a, coin :: Coin} deriving (Generic)
 
-data CoinIdentificationError = MultipleMatchingDefinitions [CoinDef] | NoMatchingDefinitions deriving (Eq, Show)
+data CoinIdentificationError
+  = MultipleMatchingDefinitions [CoinDef]
+  | NoMatchingDefinitions
+  deriving (Eq, Show, Generic)
+
+instance TextShow CoinIdentificationError where
+  showbPrec = genericShowbPrec
 
 identifyCoin :: (MonadError CoinIdentificationError m) => [CoinDef] -> Text -> m Coin
 identifyCoin coinDefs input = do

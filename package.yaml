@@ -93,3 +93,12 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - coin-classifier
+    - hspec
+    - text
+    - directory
+    - filepath
+    - string-interpolate
+    default-extensions:
+    - ImportQualifiedPost
+    - QuasiQuotes
+    - OverloadedStrings

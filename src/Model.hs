@@ -22,6 +22,7 @@ module Model
     ClassifiedCoin (classifiedCoinKey, coin),
     classifyAs,
     CoinIdentificationError (..),
+    RawGrading (..),
   )
 where
 
@@ -242,7 +243,9 @@ identifyCoinFeatures input = filter (matchesClassifier input) allCoinFeatures
 
 data Coin = Coin {coinDef :: CoinDef, features :: [CoinFeature]} deriving (Eq, Show)
 
-data UnclassifiedCoin a = UnclassifiedCoin {unclassifiedCoinKey :: a, title :: Text} deriving (Generic)
+newtype RawGrading = RawGrading {unRawGrading :: Text} deriving newtype (Show, TextShow)
+
+data UnclassifiedCoin a = UnclassifiedCoin {unclassifiedCoinKey :: a, title :: Text, rawGrading :: RawGrading} deriving (Generic)
 
 classifyAs :: UnclassifiedCoin a -> Coin -> ClassifiedCoin a
 classifyAs un c = ClassifiedCoin {classifiedCoinKey = unclassifiedCoinKey un, coin = c}

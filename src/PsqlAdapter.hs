@@ -1,5 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-deriving-defaults #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module PsqlAdapter
   ( mkHandle,
@@ -29,7 +30,7 @@ import Database.PostgreSQL.Simple.SqlQQ (sql)
 import GHC.Conc (atomically, forkIO)
 import GHC.Generics (Generic)
 import GHC.Int (Int64)
-import Model (ClassifiedCoin (classifiedCoinKey, coin), Coin (coinDef), CoinDef (coinType, year), CoinFeature, CoinType, UnclassifiedCoin (..), features, unYear)
+import Model (ClassifiedCoin (classifiedCoinKey, coin), Coin (coinDef), CoinDef (coinType, year), CoinFeature, CoinType, RawGrading (RawGrading), UnclassifiedCoin (..), features, unYear)
 import TextShow (TextShow, showt)
 
 newtype PsqlAdapterHandle = PsqlAdapterHandle (Pool Connection)
@@ -97,6 +98,9 @@ newtype LotsPk = LotsPk {unLotsPk :: Text}
 instance FromField LotsPk where
   fromField f bs = LotsPk <$> fromField f bs
 
+instance FromField RawGrading where
+  fromField f bs = RawGrading <$> fromField f bs
+
 instance FromRow (UnclassifiedCoin LotsPk)
 
 inputSource :: PsqlAdapterHandle -> IO (ConduitT () (UnclassifiedCoin LotsPk) IO ())
@@ -108,7 +112,7 @@ inputSource (PsqlAdapterHandle pool) = do
   sourceQuery_
     conn
     [sql|
-      SELECT url as unclassifiedCoinKey, title FROM "lots" WHERE "classification" IS NULL AND "classification_state" = 0 ORDER BY "date"
+      SELECT url as unclassifiedCoinKey, title, condition FROM "lots" WHERE "classification" IS NULL AND "classification_state" = 0 ORDER BY "date"
     |]
 
 markAsFailed :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => PsqlAdapterHandle -> (LotsPk, Text) -> m ()
